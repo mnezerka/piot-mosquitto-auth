@@ -5,9 +5,9 @@ import (
     "net/http"
     "os"
     "github.com/urfave/cli"
-    "mosquitto-auth/handler"
-    "mosquitto-auth/config"
-    piotcontext "mosquitto-auth/context"
+    "piot-mosquitto-auth/handler"
+    "piot-mosquitto-auth/config"
+    piotcontext "piot-mosquitto-auth/context"
     "go.mongodb.org/mongo-driver/mongo"
     "github.com/op/go-logging"
 )

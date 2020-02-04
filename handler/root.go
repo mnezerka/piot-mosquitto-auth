@@ -3,7 +3,7 @@ package handler
 import (
     "fmt"
     "net/http"
-    "mosquitto-auth/config"
+    "piot-mosquitto-auth/config"
 )
 
 var landingPage = []byte(fmt.Sprintf(`<html>

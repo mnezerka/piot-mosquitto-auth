@@ -1,4 +1,4 @@
-module mosquitto-auth
+module piot-mosquitto-auth
 
 go 1.12
 

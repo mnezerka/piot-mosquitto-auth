@@ -5,7 +5,7 @@ import (
     "os"
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/mongo/options"
-    "mosquitto-auth/service"
+    "piot-mosquitto-auth/service"
 )
 
 const LOG_FORMAT = "%{color}%{time:2006/01/02 15:04:05 -07:00 MST} [%{level:.6s}] %{shortfile} : %{color:reset}%{message}"

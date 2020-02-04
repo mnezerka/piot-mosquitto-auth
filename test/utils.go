@@ -9,7 +9,7 @@ import (
     "runtime"
     "reflect"
     "testing"
-    piotcontext "mosquitto-auth/context"
+    piotcontext "piot-mosquitto-auth/context"
 )
 
 func CreateTestContext() context.Context {

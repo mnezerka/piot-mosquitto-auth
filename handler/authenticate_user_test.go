@@ -7,8 +7,8 @@ import (
     "net/http/httptest"
     "strings"
     "testing"
-    "mosquitto-auth/test"
-    "mosquitto-auth/handler"
+    "piot-mosquitto-auth/test"
+    "piot-mosquitto-auth/handler"
 )
 
 func TestAuthUser(t *testing.T) {
