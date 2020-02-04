@@ -5,10 +5,11 @@ import (
     "fmt"
     "net/http"
     "github.com/op/go-logging"
-    "mosquitto-auth/utils"
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/bson"
     "go.mongodb.org/mongo-driver/bson/primitive"
+    "piot-mosquitto-auth/utils"
+    "piot-mosquitto-auth/model"
 )
 
 type MosquittoAuthAcl struct {
@@ -47,8 +48,6 @@ func (h *Authorize) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     // first, try to check static users
     switch packet.Username {
     case "test":
-
-
         if utils.GetMqttRootTopic(packet.Topic) == "test" {
             ctx.Value("log").(*logging.Logger).Debugf("Authorization passed for static user <%s> and topic <%s>", packet.Username, packet.Topic)
             return
@@ -75,73 +74,45 @@ func (h *Authorize) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    ctx.Value("log").(*logging.Logger).Debugf("Find user by id <%s>", packet.Username)
+    // reject org name
+    topicOrgName := utils.GetMqttTopicOrg(packet.Topic)
 
-    // try to find user in database
-    db := ctx.Value("db").(*mongo.Database)
-
-    var user User
-
-    err := db.Collection("users").FindOne(ctx, bson.M{"email": packet.Username}).Decode(&user)
-    if err != nil {
-        ctx.Value("log").(*logging.Logger).Errorf("Users service error: %v", err)
-        http.Error(w, fmt.Sprintf("User identified as <%s> does not exist or provided credentials are wrong.", packet.Username), 401)
-        return
+    // reject all topics with empty org name
+    if topicOrgName == "" {
+        ctx.Value("log").(*logging.Logger).Errorf("Reject empty org name for topic %s -> authorization failed", packet.Topic)
+        http.Error(w, fmt.Sprintf("Empty organization is not accepted (topic: %s)", packet.Topic), 401)
     }
 
-    ctx.Value("log").(*logging.Logger).Debugf("User identified as <%s> was found.", packet.Username)
+    ctx.Value("log").(*logging.Logger).Debugf("Look for org mqtt user idetified as <%s>", packet.Username)
 
-    // fetch user orgs
-
-    // filter orgusers to current (single) user
-    stage_match := bson.M{"$match": bson.M{"user_id": user.Id}}
-
-    // find orgs details
-    stage_lookup := bson.M{"$lookup": bson.M{"from": "orgs", "localField": "org_id", "foreignField": "_id", "as": "orgs"}}
-
-    // expand orgs
-    stage_unwind := bson.M{"$unwind": "$orgs"}
-
-    // replace root
-    stage_new_root := bson.M{"$replaceWith": "$orgs"}
-
-    pipeline := []bson.M{stage_match, stage_lookup, stage_unwind, stage_new_root}
-
-    cur, err := db.Collection("orgusers").Aggregate(ctx, pipeline)
+    // find all orgs were configured mqtt user matches the one received from mosquitto
+    // this is because same mqtt credentials could be configured in more than one org
+    db := ctx.Value("db").(*mongo.Database)
+    collection := db.Collection("orgs")
+    cur, err := collection.Find(ctx, bson.M{"mqtt_username": packet.Username})
     if err != nil {
-        ctx.Value("log").(*logging.Logger).Errorf("Error while querying user orgs: %v", err)
-        http.Error(w, "Fetching of user orgs failed", 500)
+        ctx.Value("log").(*logging.Logger).Errorf("GQL: error : %v", err)
         return
     }
     defer cur.Close(ctx)
 
+    // loop through all orgs that were found
     for cur.Next(ctx) {
-        var org Org
-        if err := cur.Decode(&org); err != nil {
-            ctx.Value("log").(*logging.Logger).Errorf("Error while querying user orgs: %v", err)
-            http.Error(w, "Fetching of user orgs failed", 500)
+        // To decode into a struct, use cursor.Decode()
+        org := model.Org{}
+        err := cur.Decode(&org)
+        if err != nil {
+            ctx.Value("log").(*logging.Logger).Errorf("GQL: error : %v", err)
             return
         }
-        user.Orgs = append(user.Orgs, org)
-    }
 
-    if err := cur.Err(); err != nil {
-        ctx.Value("log").(*logging.Logger).Errorf("Error while querying user orgs: %v", err)
-        http.Error(w, "Fetching of user orgs failed", 500)
-        return
-    }
-
-    // extract org from topic name and check if user is member of given org
-    orgName := utils.GetMqttTopicOrg(packet.Topic)
-    if orgName != "" {
-        for _, userOrg := range user.Orgs {
-            if userOrg.Name == orgName {
-                ctx.Value("log").(*logging.Logger).Debugf("Topic is matching user org (%s) -> authorization passed", orgName)
-                return
-            }
+        // if currently iterated org matches the one from mosquitto topic
+        if org.Name == topicOrgName {
+            ctx.Value("log").(*logging.Logger).Debugf("Topic is matching org mqtt user (%s) -> authorization passed", packet.Topic)
+            return
         }
     }
 
-    ctx.Value("log").(*logging.Logger).Debugf("No org matching topic %s -> authorization failed", orgName)
-    http.Error(w, fmt.Sprintf("User is not assigned to organization %s", orgName), 401)
+    ctx.Value("log").(*logging.Logger).Debugf("No org mqtt user matching topic %s -> authorization failed", packet.Topic)
+    http.Error(w, fmt.Sprintf("No valid mqtt credentials found for organization %s", topicOrgName), 401)
 }

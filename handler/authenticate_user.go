@@ -7,21 +7,13 @@ import (
     "github.com/op/go-logging"
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/bson"
-    "go.mongodb.org/mongo-driver/bson/primitive"
-    "golang.org/x/crypto/bcrypt"
+    "piot-mosquitto-auth/model"
 )
 
+// Structure of HTTP body as received from mosquitto broker auth plugin
 type MosquittoAuthUser struct {
     Username    string `json:"username"`
     Password    string `json:"password"`
-}
-
-// Represents user as stored in database
-type User struct {
-    Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-    Email       string `json:"email"`
-    Password    string `json:"password"`
-    Orgs        []Org  `json:"orgs"`
 }
 
 type AuthenticateUser struct { }
@@ -73,28 +65,17 @@ func (h *AuthenticateUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-
-    // try to find user in database
+    // try to find org mqtt user in piot database
     db := ctx.Value("db").(*mongo.Database)
 
-    var user User
-    collection := db.Collection("users")
-    err := collection.FindOne(ctx, bson.D{{"email", packet.Username}}).Decode(&user)
+    var org model.Org
+    collection := db.Collection("orgs")
+    err := collection.FindOne(ctx, bson.M{"mqtt_username": packet.Username, "mqtt_password": packet.Password}).Decode(&org)
     if err != nil {
         ctx.Value("log").(*logging.Logger).Errorf(err.Error())
-        http.Error(w, fmt.Sprintf("User identified as <%s> does not exist or provided credentials are wrong.", packet.Username), 401)
+        http.Error(w, fmt.Sprintf("Mqtt credentials identified as <%s> do not exist or password does not match.", packet.Username), 401)
         return
     }
 
-    ctx.Value("log").(*logging.Logger).Debugf("User %s exists", packet.Username)
-
-    // check if password is correct
-    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(packet.Password))
-    if err != nil {
-        ctx.Value("log").(*logging.Logger).Errorf(err.Error())
-        http.Error(w, fmt.Sprintf("User identified as <%s> does not exist or provided credentials are wrong.", packet.Username), 401)
-        return
-    }
-
-    ctx.Value("log").(*logging.Logger).Debugf("Authentication for user %s passed", packet.Username)
+    ctx.Value("log").(*logging.Logger).Debugf("Authentication for credentials <%s> passed", packet.Username)
 }
