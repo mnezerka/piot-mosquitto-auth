@@ -9,6 +9,10 @@ import (
     "runtime"
     "reflect"
     "testing"
+    "time"
+    "go.mongodb.org/mongo-driver/mongo"
+    "go.mongodb.org/mongo-driver/bson"
+    "go.mongodb.org/mongo-driver/bson/primitive"
     piotcontext "piot-mosquitto-auth/context"
 )
 
@@ -60,4 +64,29 @@ func CheckStatusCode(t *testing.T, rr *httptest.ResponseRecorder, expected int) 
         t.Errorf("\033[31mWrong response status code: got %v want %v, body:\n%s\033[39m",
             status, expected, rr.Body.String())
     }
+}
+
+func CleanDb(t *testing.T, ctx context.Context) {
+    db := ctx.Value("db").(*mongo.Database)
+    db.Collection("orgs").DeleteMany(ctx, bson.M{})
+    db.Collection("users").DeleteMany(ctx, bson.M{})
+    db.Collection("orgusers").DeleteMany(ctx, bson.M{})
+    db.Collection("things").DeleteMany(ctx, bson.M{})
+    t.Log("DB is clean")
+}
+
+func CreateOrg(t *testing.T, ctx context.Context, name string) (primitive.ObjectID) {
+    db := ctx.Value("db").(*mongo.Database)
+
+    res, err := db.Collection("orgs").InsertOne(ctx, bson.M{
+        "name": name,
+        "created": int32(time.Now().Unix()),
+        "mqtt_username": "tester",
+        "mqtt_password": "testerpwd",
+    })
+    Ok(t, err)
+
+    t.Logf("Created org %v", res.InsertedID)
+
+    return res.InsertedID.(primitive.ObjectID)
 }

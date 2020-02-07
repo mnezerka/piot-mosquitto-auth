@@ -98,6 +98,8 @@ func (h *Authorize) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
     // loop through all orgs that were found
     for cur.Next(ctx) {
+        ctx.Value("log").(*logging.Logger).Infof("Iteration")
+
         // To decode into a struct, use cursor.Decode()
         org := model.Org{}
         err := cur.Decode(&org)
@@ -105,6 +107,8 @@ func (h *Authorize) ServeHTTP(w http.ResponseWriter, r *http.Request) {
             ctx.Value("log").(*logging.Logger).Errorf("GQL: error : %v", err)
             return
         }
+
+        ctx.Value("log").(*logging.Logger).Infof("Iteration org %s %s", org.Name, topicOrgName)
 
         // if currently iterated org matches the one from mosquitto topic
         if org.Name == topicOrgName {

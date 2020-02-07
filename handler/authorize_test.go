@@ -9,7 +9,7 @@ import (
     "piot-mosquitto-auth/handler"
 )
 
-func TestAuthorize(t *testing.T) {
+func TestAuthorizeUnknownUser(t *testing.T) {
     ctx := test.CreateTestContext()
 
     deviceData := `
@@ -143,3 +143,87 @@ func TestAuthorizeStaticUserPiot(t *testing.T) {
     handler.ServeHTTP(rr, req)
     test.CheckStatusCode(t, rr, 200)
 }
+
+func TestAuthorizeUserFromDb(t *testing.T) {
+    ctx := test.CreateTestContext()
+    test.CleanDb(t, ctx)
+    test.CreateOrg(t, ctx, "SomeOrg")
+
+    deviceData := `
+    {
+        "acc":2,
+        "clientid":"mqtt-client",
+        "topic":"org/SomeOrg/hello",
+        "username":"tester"
+    }`
+
+    req, err := http.NewRequest("POST", "/", strings.NewReader(deviceData))
+    test.Ok(t, err)
+
+    req = req.WithContext(ctx)
+    rr := httptest.NewRecorder()
+
+    handler := handler.Authorize{}
+
+    handler.ServeHTTP(rr, req)
+
+    test.CheckStatusCode(t, rr, 200)
+}
+
+// This verifies that known user (credentials could be valid
+// for other org) is rejected if he/she tries to send
+// to unknown org org
+func TestAuthorizeUserFromDbForUnknownOrg(t *testing.T) {
+    ctx := test.CreateTestContext()
+    test.CleanDb(t, ctx)
+    test.CreateOrg(t, ctx, "SomeOrg")
+
+    deviceData := `
+    {
+        "acc":2,
+        "clientid":"mqtt-client",
+        "topic":"org/UnknownOrg/hello",
+        "username":"tester"
+    }`
+
+    req, err := http.NewRequest("POST", "/", strings.NewReader(deviceData))
+    test.Ok(t, err)
+
+    req = req.WithContext(ctx)
+    rr := httptest.NewRecorder()
+
+    handler := handler.Authorize{}
+
+    handler.ServeHTTP(rr, req)
+
+    test.CheckStatusCode(t, rr, 401)
+}
+
+// This verifies that unknown user is rejected if he/she
+// tries to send to not known org
+func TestAuthorizeUnknownUserFromDbForOrg(t *testing.T) {
+    ctx := test.CreateTestContext()
+    test.CleanDb(t, ctx)
+    test.CreateOrg(t, ctx, "SomeOrg")
+
+    deviceData := `
+    {
+        "acc":2,
+        "clientid":"mqtt-client",
+        "topic":"org/SomeOrg/hello",
+        "username":"testerx"
+    }`
+
+    req, err := http.NewRequest("POST", "/", strings.NewReader(deviceData))
+    test.Ok(t, err)
+
+    req = req.WithContext(ctx)
+    rr := httptest.NewRecorder()
+
+    handler := handler.Authorize{}
+
+    handler.ServeHTTP(rr, req)
+
+    test.CheckStatusCode(t, rr, 401)
+}
+
